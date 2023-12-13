@@ -18,8 +18,22 @@
 #define __BASE_FILE__ "settings.c"
 #endif
 
+///temperature saving variables
+//#define TEMP_SETTINGS (PROFILE_SETTINGS - FLASH_PAGE_SIZE) //0x801EC00
+#define TEMP_SETTINGS 0x801EC00
+//#define TEMP_SETTINGS (0x801F000+3840+128)
+
+static uint32_t tempCnt=0;
+static uint16_t tempRam=0;
+//static bool firstRead=true
+static bool tempChangeTrigger=false;
+static uint32_t prevTemperature    = 0u;
+static uint32_t newTemperature = 0u;
+static uint32_t lastCheckTimeOfTemperature=0;
+///temperature saving variables end
+
 const settings_t defaultSettings = {
-  .version              =  SYSTEM_SETTINGS_VERSION,
+  .version              = (~((uint32_t)SETTINGS_VERSION<<16)&0xFFFF0000) | SETTINGS_VERSION,  // Higher 16bit is 1s complement to make detection stronger
 #ifdef ST7565
   .contrastOrBrightness = 34,
 #else
@@ -59,6 +73,7 @@ const settings_t defaultSettings = {
   .debugEnabled         = disable,
   .language             = lang_english,
   .clone_fix            = disable,
+  .state                = initialized,
 };
 
 #ifdef ENABLE_ADDONS
@@ -115,6 +130,11 @@ static uint32_t ChecksumSettings(settings_t* settings);
 static uint32_t ChecksumProfile(profile_t* profile);
 static void resetSystemSettings(void);
 static void resetCurrentProfile(void);
+
+static uint16_t readTempInit();
+static uint16_t readTemp();
+static void writeTemp(uint16_t tempRam);
+
 
 #ifdef ENABLE_ADDONS
 static void loadAddonSettings(void);
@@ -234,6 +254,32 @@ void checkSettings(void){
     systemSettings.save_Flag=0;
     return;
   }
+
+
+  //auto save user temperature after 10s
+    if(systemSettings.settings.saveTemp)
+    {
+		newTemperature=getUserTemperature();
+		if(newTemperature!=prevTemperature) //poll for temprature change
+		{
+			prevTemperature=newTemperature;
+			lastCheckTimeOfTemperature = CurrentTime; //start time counting from now
+			tempChangeTrigger=true;
+
+		}
+
+		if((CurrentTime-lastCheckTimeOfTemperature)>9999)
+		{
+			lastCheckTimeOfTemperature = CurrentTime; //reset time counting
+			if(tempChangeTrigger==true)
+			{
+				if(readTemp() != newTemperature) //make sure not to write the same value twice
+					writeTemp(newTemperature);
+				tempChangeTrigger=false;
+			}
+		}
+    }
+
 
   // Auto save on content change
   if( (systemSettings.setupMode==enable) || (getIronCalibrationMode()) || (getIronErrorFlags().safeMode) || ((CurrentTime-lastCheckTime)<999)){
@@ -381,7 +427,7 @@ static void saveSettings(uint8_t mode){
   configurePWMpin(output_Low);
   __enable_irq();
 
-  if(systemSettings.settings.version!=SYSTEM_SETTINGS_VERSION){
+  if( (systemSettings.settings.state!=initialized) || (systemSettings.Profile.state!=initialized) ){
     Error_Handler();
   }
 
@@ -395,18 +441,15 @@ static void saveSettings(uint8_t mode){
   flashBufferAddons->addonSettings = systemSettings.addonSettings;
 #endif
 
-  if(mode==keepProfiles){
-    if((profile<=profile_C210) && (systemSettings.Profile.ID == profile )){
-      systemSettings.ProfileChecksum = ChecksumProfile(&systemSettings.Profile);
-      flashBufferProfiles->ProfileChecksum[profile] = systemSettings.ProfileChecksum;
-      flashBufferProfiles->Profile[profile] = systemSettings.Profile;
-    }
-    // Else unknown profile, probably profile_none (Resetted system settings) leave it untouched, let restoreProfile check it out and reset defaults if necessary.
+  if((mode==keepProfiles) && (profile<=profile_C210) && (systemSettings.Profile.ID == profile )){
+    systemSettings.ProfileChecksum = ChecksumProfile(&systemSettings.Profile);
+    flashBufferProfiles->ProfileChecksum[profile] = systemSettings.ProfileChecksum;
+    flashBufferProfiles->Profile[profile] = systemSettings.Profile;
   }
   else{
     mode = wipeProfiles;
     for(uint8_t x=0;x<NUM_PROFILES;x++){
-      flashBufferProfiles->Profile[x].version = 0xFF;
+      flashBufferProfiles->Profile[x].state = 0xFF;
       flashBufferProfiles->ProfileChecksum[x] = 0xFFFFFFFF;
       memset(&flashBufferProfiles->Profile[x],0xFF,sizeof(profile_t));
     }
@@ -420,14 +463,12 @@ static void saveSettings(uint8_t mode){
   writeFlash((uint32_t*)flashBufferAddons, sizeof(flashSettingsAddons_t), (uint32_t)&flashAddonSettings);
 #endif
 
-  // Check flash and profile settings have same checksum
   if(mode==keepProfiles){
-    for(uint8_t x=0;x<NUM_PROFILES;x++){
-      uint32_t ProfileFlash  = ChecksumProfile(&flashProfilesSettings.Profile[x]);
-      uint32_t ProfileRam    = ChecksumProfile(&flashBufferProfiles->Profile[x]);
-      if(ProfileFlash != ProfileRam){
-        Flash_error();
-      }
+    uint32_t ProfileFlash  = ChecksumProfile(&flashProfilesSettings.Profile[profile]);
+    uint32_t ProfileRam    = ChecksumProfile(&systemSettings.Profile);
+
+    if(ProfileFlash != ProfileRam){
+      Flash_error();
     }
   }
 
@@ -470,26 +511,36 @@ void restoreSettings() {
   return;
 #endif
 
-  if(flashGlobalSettings.settings.version != SYSTEM_SETTINGS_VERSION){            // System settings version mismatch
-    resetSystemSettings();                                                        // Reset current settings
+  if(flashGlobalSettings.settings.state != initialized){
+    resetSystemSettings();
 #ifdef ENABLE_ADDONS
     resetAddonSettings();
 #endif
-    loadProfile(systemSettings.settings.bootProfile);
-    saveSettings(keepProfiles);
+    saveSettings(wipeProfiles);
   }
   else{
     Button_reset();
   }
 
-  systemSettings.settings = flashGlobalSettings.settings;
-  systemSettings.settingsChecksum = flashGlobalSettings.settingsChecksum;
+  if(flashGlobalSettings.settings.version!=defaultSettings.version){    // Silent reset if version mismatch
+    resetSystemSettings();
+    saveSettings(wipeProfiles);
+    resetAddonSettings();
+  }
+  else{
+    systemSettings.settings = flashGlobalSettings.settings;
+    systemSettings.settingsChecksum = flashGlobalSettings.settingsChecksum;
+  }
+
 
   if(ChecksumSettings(&systemSettings.settings)!=systemSettings.settingsChecksum){   // Show error message if bad checksum
     checksumError(reset_All);
   }
 
   loadProfile(systemSettings.settings.bootProfile); // assume the boot profile
+   uint16_t rTemp=readTempInit();
+   if(systemSettings.settings.saveTemp) setUserTemperature(rTemp);
+   else setUserTemperature(systemSettings.Profile.defaultTemperature);
 
 #ifdef ENABLE_ADDONS
   loadAddonSettings();
@@ -637,6 +688,7 @@ static void resetCurrentProfile(void){
     for(uint8_t x = 0; x < NUM_TIPS; x++) {
       systemSettings.Profile.tip[x].calADC_At_250   = T12_Cal250;
       systemSettings.Profile.tip[x].calADC_At_400   = T12_Cal400;     // These values are way lower, but better to be safe than sorry
+      systemSettings.Profile.tip[x].active          = 1;              // All tips active
       systemSettings.Profile.tip[x].PID.Kp          = 4000;           // val = /1.000.000
       systemSettings.Profile.tip[x].PID.Ki          = 5500;           // val = /1.000.000
       systemSettings.Profile.tip[x].PID.Kd          = 700;           // val = /1.000.000
@@ -749,22 +801,22 @@ static void resetCurrentProfile(void){
   systemSettings.Profile.smartActiveLoad            = 30;
   systemSettings.Profile.standDelay                 = 0;
   systemSettings.Profile.StandMode                  = mode_sleep;
-  systemSettings.Profile.version                    = PROFILE_SETTINGS_VERSION;
+  systemSettings.Profile.state                      = initialized;
 }
 
 void loadProfile(uint8_t profile){
-  uint8_t p = profile;
-  if(profile>profile_C210){
-    profile = profile_T12;                            // If profile not valid, set T12 by default
-  }
-
   while(ADC_Status!=ADC_Idle);
   __disable_irq();
   HAL_IWDG_Refresh(&hiwdg);
   systemSettings.currentProfile=profile;
-  if(profile<=profile_C210){                                                                  // If valid profile
-    if(flashProfilesSettings.Profile[profile].version != PROFILE_SETTINGS_VERSION){           // If flash profile not initialized or version mismatch
-      resetCurrentProfile();                                                                  // Load defaults silently
+  if(profile==profile_None){                                                    // If profile not initialized yet, use T12 values until the system is configured
+    systemSettings.currentProfile=profile_T12;                         // Force T12 profile
+    resetCurrentProfile();                                                      // Load default data
+    systemSettings.currentProfile=profile_None;                        // Revert to none to trigger setup screen
+  }
+  else if(profile<=profile_C210){                                               // If valid profile
+    if(flashProfilesSettings.Profile[profile].state!=initialized){                      // If flash profile not initialized
+      resetCurrentProfile();                                                    // Load defaults
       systemSettings.ProfileChecksum = ChecksumProfile(&systemSettings.Profile);
     }
     else{
@@ -784,9 +836,6 @@ void loadProfile(uint8_t profile){
   setCurrentTip(systemSettings.Profile.defaultTip);
   TIP.filter=systemSettings.Profile.tipFilter;
   ironSchedulePwmUpdate();
-  if(p==profile_None){                                     // If profile not set, revert to profile_none to trigger setup screen
-    systemSettings.currentProfile = p;
-  }
   __enable_irq();
 }
 
@@ -897,3 +946,49 @@ static void ErrCountDown(uint8_t Start,uint8_t  xpos, uint8_t ypos){
     Start--;
   }
 }
+
+
+
+
+uint16_t readTempInit() //call it only once during init
+{
+	//uint16_t tempRam=0;
+	uint16_t tempFlash=0;
+	for(tempCnt=0; tempCnt<FLASH_PAGE_SIZE; tempCnt+=2)
+	{
+		tempFlash = *(__IO uint16_t*)((void*)TEMP_SETTINGS+tempCnt);
+		if(tempFlash==0xffff) break;
+		tempRam=tempFlash;
+	}
+	if((tempRam > systemSettings.Profile.MaxSetTemperature) || (tempRam < systemSettings.Profile.MinSetTemperature))
+		tempRam=systemSettings.Profile.defaultTemperature;
+	return tempRam;
+}
+
+
+uint16_t readTemp() //call before every write to checc if sth changed
+{
+	return tempRam;
+}
+
+void writeTemp(uint16_t tempArg)
+{
+
+	if(tempCnt>=FLASH_PAGE_SIZE)
+	{
+		eraseFlashPages(TEMP_SETTINGS, 1);
+		tempCnt=0;
+	}
+
+	__disable_irq();
+	HAL_FLASH_Unlock();
+	if(HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, TEMP_SETTINGS+tempCnt, tempArg ) != HAL_OK)
+	{
+	  Flash_error();
+	}
+	tempCnt+=2;
+	HAL_FLASH_Lock();
+	__enable_irq();
+
+}
+
