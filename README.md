@@ -1,3 +1,6 @@
+# STM32 Soldering Station Firmware modified for custom hardware
+
+Original readme below
 # STM32 Soldering Station Firmware
 
 <!-- MarkdownTOC -->
