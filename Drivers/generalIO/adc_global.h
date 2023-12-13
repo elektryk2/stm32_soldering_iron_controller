@@ -40,6 +40,9 @@ typedef struct {
   #ifdef ADC_4th
           uint16_t  ADC_4th;
   #endif
+#ifdef ADC_5th
+        uint16_t  ADC_5th;
+#endif
 } adc_measures_t;
 
 extern volatile ADCDataTypeDef_t TIP;

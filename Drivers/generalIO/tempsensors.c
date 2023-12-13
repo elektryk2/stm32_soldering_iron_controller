@@ -136,7 +136,10 @@ int16_t readColdJunctionSensorTemp_x10(bool new, bool tempUnit){
       #ifdef ENABLE_INT_TEMP
       else{                                                                                             // Compute internal temperature if int temp enabled
         #if defined STM32F101xB || defined STM32F102xB || defined STM32F103xB
-        last_NTC_C = (((1.43f-(INT_TMP.last_avg*3.3f/4096))/0.00439f)+25)*10;
+    	  if(systemSettings.settings.intTempFix) //different V25 value: 1.62V
+    		  last_NTC_C = (((1.59f-(INT_TMP.last_avg*3.3f/4096))/0.00439f)+25)*10; //default: 1.62f fine tuned to 1.59f
+    	  else
+    		  last_NTC_C = (((1.43f-(INT_TMP.last_avg*3.3f/4096))/0.00439f)+25)*10;
         #else
         float adcCalValue30 = *((uint16_t*)((uint32_t)0x1FFF7A2E));
         float adcCalValue110 = *((uint16_t*)((uint32_t)0x1FFF7A2C));
