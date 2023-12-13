@@ -121,6 +121,22 @@ static void setCal400(int32_t *val) {
   backupTip.calADC_At_400 = *val;
 }
 //=========================================================
+
+
+
+
+//=========================================================
+static void * getTipActive() {
+  temp = backupTip.active;
+  return &temp;
+}
+static void setTipActive(uint32_t *val) {
+  backupTip.active = *val;
+}
+//=========================================================
+
+
+
 static int tip_save(widget_t *w, RE_Rotation_t input) {
   uint8_t end=0;
   for(uint8_t i=0; i<TIP_LEN; i++){                                                                             // Clear trailing spaces
@@ -364,6 +380,17 @@ static void tip_settings_create(screen_t *scr){
   edit->big_step = 10;
   edit->step = 1;
   edit->setData = (void (*)(void *))&setCal400;
+
+
+  //tip active
+  newComboMultiOption(w, "Active", &edit, NULL);
+  dis=&edit->inputData;
+  dis->getData = &getTipActive;
+  edit->big_step = 1;
+  edit->step = 1;
+  edit->setData = (void (*)(void *))&setTipActive;
+  edit->options = strings[lang].OffOn;
+  edit->numberOfOptions = 2;
 
   newComboAction(w, strings[lang]._SAVE, &tip_save, &comboitem_tip_settings_save);
   newComboAction(w, strings[lang].TIP_SETTINGS_COPY, &tip_copy, &comboitem_tip_settings_copy);

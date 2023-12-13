@@ -324,7 +324,7 @@ static int Cal_Start_ProcessInput(struct screen_t *scr, RE_Rotation_t input, RE_
     else if(current_state<cal_finished){
       if(((editable_widget_t*)Widget_Cal_Measured->content)->selectable.state!=widget_edit){
         measuredTemp*=10;
-        if( abs(measuredTemp - (state_temps[current_state-10])) > 500 ){      // Abort if the measured temp is >50ºC away from target
+        if( abs(measuredTemp - (state_temps[current_state-10])) > 1000 ){      // Abort if the measured temp is >50ºC away from target
           setCalState(cal_needsAdjust);
         }
         else{

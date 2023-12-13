@@ -223,6 +223,35 @@ static void setRememberLastTemp(uint32_t *val) {
 }
 #endif
 //=========================================================
+
+//=========================================================
+static void * getScreenSaver() {
+  temp = systemSettings.settings.screenSaver;
+  return &temp;
+}
+static void setScreenSaver(uint32_t *val) {
+	systemSettings.settings.screenSaver = *val;
+}
+//=========================================================
+//=========================================================
+static void * getSaveTemp() {
+  temp = systemSettings.settings.saveTemp;
+  return &temp;
+}
+static void setSaveTemp(uint32_t *val) {
+	systemSettings.settings.saveTemp = *val;
+}
+//=========================================================
+//=========================================================
+static void * getIntTempFix() {
+  temp = systemSettings.settings.intTempFix;
+  return &temp;
+}
+static void setIntTempFix(uint32_t *val) {
+	systemSettings.settings.intTempFix = *val;
+}
+//=========================================================
+
 static void system_onEnter(screen_t *scr){
 #ifndef STM32F072xB
   clone_fix = systemSettings.settings.clone_fix;
@@ -483,6 +512,38 @@ static void system_create(screen_t *scr){
   edit->options = strings[lang].OffOn;
   edit->numberOfOptions = 2;
 #endif
+
+
+
+  //  [ intTempFix widget ]
+  //
+  newComboMultiOption(w, "Int. t. fix", &edit, NULL);
+  edit->inputData.getData = &getIntTempFix;
+  edit->big_step = 1;
+  edit->step = 1;
+  edit->setData = (setterFn)&setIntTempFix;
+  edit->options = strings[lang].OffOn;
+  edit->numberOfOptions = 2;
+
+  //  [ Save temp widget ]
+  //
+  newComboMultiOption(w, "Save temp", &edit, NULL);
+  edit->inputData.getData = &getSaveTemp;
+  edit->big_step = 1;
+  edit->step = 1;
+  edit->setData = (setterFn)&setSaveTemp;
+  edit->options = strings[lang].OffOn;
+  edit->numberOfOptions = 2;
+
+  //  [ Screen saver widget ]
+  //
+  newComboMultiOption(w, "Screensaver", &edit, NULL);
+  edit->inputData.getData = &getScreenSaver;
+  edit->big_step = 1;
+  edit->step = 1;
+  edit->setData = (setterFn)&setScreenSaver;
+  edit->options = strings[lang].OffOn;
+  edit->numberOfOptions = 2;
 
   newComboScreen(w, strings[lang].SYSTEM_RESET_MENU, screen_reset, NULL);
   newComboScreen(w, strings[lang].SYSTEM_DISPLAY_MENU, screen_display, NULL);
