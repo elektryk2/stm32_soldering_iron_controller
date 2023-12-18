@@ -656,7 +656,7 @@ void resetIronError(void){
 
 void checkIronError(void){
   CurrentTime = HAL_GetTick();
-  static IronError_t Err;
+  IronError_t Err;
   static bool firstRun=1;
   Err.Flags=0;
   Err.noIron = (TIP.last_raw>systemSettings.Profile.noIronValue);
