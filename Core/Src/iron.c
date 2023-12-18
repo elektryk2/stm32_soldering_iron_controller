@@ -656,12 +656,13 @@ void resetIronError(void){
 
 void checkIronError(void){
   CurrentTime = HAL_GetTick();
-  IronError_t Err;
+  static IronError_t Err;
+  static bool firstRun=1;
   Err.Flags=0;
   Err.noIron = (TIP.last_raw>systemSettings.Profile.noIronValue);
   Err.safeMode = Iron.Error.safeMode;
 
-  if(!Iron.Error.noIron){                                                               // Bypass other errors when no iron detected
+  if(!Iron.Error.noIron && !firstRun){                                                               // Bypass other errors when no iron detected
       Err.NTC_high =  (last_NTC_C > 800);
       Err.NTC_low =  (last_NTC_C < -200);
       #ifdef USE_VIN
@@ -703,13 +704,17 @@ void checkIronError(void){
         }
       }
       else{                                                                             // If error before booting, set init mode
-        setCurrentMode(systemSettings.settings.initMode);
+        //if(systemSettings.Profile.WakeInputMode!=mode_stand)
+        	setCurrentMode(systemSettings.settings.initMode);
+        //else
+        	//setCurrentMode(mode_run);
       }
     }
   }
   else{
     Iron.Error.Flags=FLAG_NOERROR;
   }
+  firstRun=0;
 }
 bool getIronError(void){
   return Iron.Error.Flags;
