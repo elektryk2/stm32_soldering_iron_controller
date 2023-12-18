@@ -704,10 +704,7 @@ void checkIronError(void){
         }
       }
       else{                                                                             // If error before booting, set init mode
-        //if(systemSettings.Profile.WakeInputMode!=mode_stand)
         	setCurrentMode(systemSettings.settings.initMode);
-        //else
-        	//setCurrentMode(mode_run);
       }
     }
   }
