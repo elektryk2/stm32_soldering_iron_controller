@@ -26,7 +26,7 @@ static bool clone_fix;
 
 void update_System_menu(void){
   bool mode = (systemSettings.Profile.WakeInputMode==mode_shake);
-  comboitem_system_BootMode->enabled        = mode;
+  //comboitem_system_BootMode->enabled        = 1; //= mode;
   comboitem_system_ShakeWakeMode->enabled   = mode;
   comboitem_system_ButtonWakeMode->enabled  = mode;
 }
