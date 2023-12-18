@@ -477,7 +477,7 @@ int main_screenProcessInput(screen_t * scr, RE_Rotation_t input, RE_State_t *sta
   }
 
   // Shake icon in stand mode
-  if(systemSettings.Profile.WakeInputMode==mode_stand)
+  if(systemSettings.Profile.WakeInputMode==mode_stand && !systemSettings.Profile.smartActiveEnabled)
   {
 	  if(WAKE_input() && mainScr.ironStatus==status_ok)
 		  mainScr.shakeActive=1;
