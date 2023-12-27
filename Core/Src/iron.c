@@ -182,7 +182,7 @@ void handleIron(void) {
     if((Iron.CurrentMode==mode_boost) && (mode_time>systemSettings.Profile.boostTimeout)){  // If boost mode and time expired
       setCurrentMode(mode_run);
     }
-    else if(Iron.CurrentMode==mode_run){                                                      // If running
+    else if(Iron.CurrentMode==mode_run && systemSettings.Profile.WakeInputMode==mode_shake){        //Ignore sleep and standby timeout in stand mode                                              // If running
       if(systemSettings.Profile.standbyTimeout){                                              // If standby timer enabled
         if(mode_time>systemSettings.Profile.standbyTimeout){                                  // Check timeout
           setCurrentMode(mode_standby);
