@@ -21,15 +21,24 @@
 ///temperature saving variables
 //#define TEMP_SETTINGS (PROFILE_SETTINGS - FLASH_PAGE_SIZE) //0x801EC00
 #define TEMP_SETTINGS 0x801EC00
+//                    0x801e800
+#define PROFILE_TIP_SETTINGS (TEMP_SETTINGS-FLASH_PAGE_SIZE)
 //#define TEMP_SETTINGS (0x801F000+3840+128)
 
 static uint32_t tempCnt=0;
 static uint16_t tempRam=0;
+static uint32_t profileTipCnt=0;
+static profileTipSettings_t profileTipRam={.profileTip=0};
 //static bool firstRead=true
 static bool tempChangeTrigger=false;
+static bool profileTipChangeTrigger=false;
 static uint32_t prevTemperature    = 0u;
 static uint32_t newTemperature = 0u;
 static uint32_t lastCheckTimeOfTemperature=0;
+static uint32_t lastCheckTimeOfProfileTip=0;
+static profileTipSettings_t prevProfileTip={.profileTip=0};
+static profileTipSettings_t newProfileTip={.profileTip=0};
+
 ///temperature saving variables end
 
 const settings_t defaultSettings = {
@@ -131,9 +140,9 @@ static uint32_t ChecksumProfile(profile_t* profile);
 static void resetSystemSettings(void);
 static void resetCurrentProfile(void);
 
-static uint16_t readTempInit();
-static uint16_t readTemp();
-static void writeTemp(uint16_t tempRam);
+static void readTempInit(uint16_t * valRam, uint32_t addr, uint32_t * cnt);
+static void writeTemp(uint16_t tempArg, uint32_t addr, uint32_t * cnt);
+
 
 
 #ifdef ENABLE_ADDONS
@@ -208,13 +217,21 @@ void checkSettings(void){
                        scr_index == screen_reset_confirmation);
 
 #ifndef HAS_BATTERY
-  if(systemSettings.settings.rememberLastProfile)
+  if(systemSettings.settings.saveTemp)
   {
-    systemSettings.settings.bootProfile = systemSettings.currentProfile;
+	 // profileTipRam.bootProfile=systemSettings.currentProfile;
+	 // profileTipRam.bootTip=systemSettings.currentTip;
   }
-  if(systemSettings.settings.rememberLastTip)
+  else
   {
-    systemSettings.Profile.defaultTip = systemSettings.currentTip;
+	  if(systemSettings.settings.rememberLastProfile)
+	  {
+		systemSettings.settings.bootProfile = systemSettings.currentProfile;
+	  }
+	  if(systemSettings.settings.rememberLastTip)
+	  {
+		systemSettings.Profile.defaultTip = systemSettings.currentTip;
+	  }
   }
 #endif
 
@@ -273,12 +290,35 @@ void checkSettings(void){
 			lastCheckTimeOfTemperature = CurrentTime; //reset time counting
 			if(tempChangeTrigger==true)
 			{
-				if(readTemp() != newTemperature) //make sure not to write the same value twice
-					writeTemp(newTemperature);
+				if(tempRam != newTemperature) //make sure not to write the same value twice
+					writeTemp(newTemperature,TEMP_SETTINGS,&tempCnt);
 				tempChangeTrigger=false;
 			}
 		}
+
+
+		newProfileTip.bootProfile=systemSettings.currentProfile;
+		newProfileTip.bootTip=systemSettings.currentTip;
+		if(newProfileTip.profileTip!=prevProfileTip.profileTip) //poll for temprature change
+		{
+			prevProfileTip.profileTip=newProfileTip.profileTip;
+			lastCheckTimeOfProfileTip = CurrentTime; //start time counting from now
+			profileTipChangeTrigger=true;
+
+		}
+
+		if((CurrentTime-lastCheckTimeOfProfileTip)>999)
+		{
+			lastCheckTimeOfProfileTip = CurrentTime; //reset time counting
+			if(profileTipChangeTrigger==true)
+			{
+				if(profileTipRam.profileTip != newProfileTip.profileTip) //make sure not to write the same value twice
+					writeTemp(newProfileTip.profileTip,PROFILE_TIP_SETTINGS,&profileTipCnt);
+				profileTipChangeTrigger=false;
+			}
+		}
     }
+
 
 
   // Auto save on content change
@@ -537,9 +577,22 @@ void restoreSettings() {
     checksumError(reset_All);
   }
 
-  loadProfile(systemSettings.settings.bootProfile); // assume the boot profile
-   uint16_t rTemp=readTempInit();
-   if(systemSettings.settings.saveTemp) setUserTemperature(rTemp);
+  readTempInit(&profileTipRam.profileTip, PROFILE_TIP_SETTINGS, &profileTipCnt); //read tip and profile from flash
+  if(profileTipRam.bootProfile>=NUM_PROFILES) profileTipRam.profileTip=0;
+
+  if(systemSettings.settings.saveTemp) // assume the boot profile
+  {
+	  loadProfile(profileTipRam.bootProfile);  //new behaviour
+	  setCurrentTip(profileTipRam.bootTip);
+  }
+  else
+	  loadProfile(systemSettings.settings.bootProfile); //default behaviour
+
+
+  readTempInit(&tempRam, TEMP_SETTINGS, &tempCnt); //read temp from flash
+	if((tempRam > systemSettings.Profile.MaxSetTemperature) || (tempRam < systemSettings.Profile.MinSetTemperature))
+		tempRam=systemSettings.Profile.defaultTemperature;
+   if(systemSettings.settings.saveTemp) setUserTemperature(tempRam);
    else setUserTemperature(systemSettings.Profile.defaultTemperature);
 
 #ifdef ENABLE_ADDONS
@@ -950,45 +1003,51 @@ static void ErrCountDown(uint8_t Start,uint8_t  xpos, uint8_t ypos){
 
 
 
-uint16_t readTempInit() //call it only once during init
+static void readTempInit(uint16_t * valRam, uint32_t addr, uint32_t * cnt) //call it only once during init
 {
-	//uint16_t tempRam=0;
-	uint16_t tempFlash=0;
-	for(tempCnt=0; tempCnt<FLASH_PAGE_SIZE; tempCnt+=2)
+	uint16_t valFlash=0;
+	for(*cnt=0; *cnt<FLASH_PAGE_SIZE; *cnt+=2)
 	{
-		tempFlash = *(__IO uint16_t*)((void*)TEMP_SETTINGS+tempCnt);
-		if(tempFlash==0xffff) break;
-		tempRam=tempFlash;
+		valFlash = *(__IO uint16_t*)((void*)addr + *cnt);
+		if(valFlash==0xffff) break;
+		*valRam=valFlash;
 	}
-	if((tempRam > systemSettings.Profile.MaxSetTemperature) || (tempRam < systemSettings.Profile.MinSetTemperature))
-		tempRam=systemSettings.Profile.defaultTemperature;
-	return tempRam;
 }
 
 
-uint16_t readTemp() //call before every write to checc if sth changed
-{
-	return tempRam;
-}
-
-void writeTemp(uint16_t tempArg)
+static void writeTemp(uint16_t tempArg, uint32_t addr, uint32_t * cnt)
 {
 
-	if(tempCnt>=FLASH_PAGE_SIZE)
+	if(*cnt>=FLASH_PAGE_SIZE)
 	{
-		eraseFlashPages(TEMP_SETTINGS, 1);
-		tempCnt=0;
+		eraseFlashPages(addr, 1);
+		*cnt=0;
 	}
 
 	__disable_irq();
 	HAL_FLASH_Unlock();
-	if(HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, TEMP_SETTINGS+tempCnt, tempArg ) != HAL_OK)
+	if(HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, addr + *cnt, tempArg ) != HAL_OK)
 	{
 	  Flash_error();
 	}
-	tempCnt+=2;
+	*cnt+=2;
 	HAL_FLASH_Lock();
 	__enable_irq();
 
 }
+
+
+
+
+//void readProfileTipInit() //call it only once during init
+//{
+//	uint16_t tempFlash=0;
+//	for(profileTipCnt=0; tempCnt<FLASH_PAGE_SIZE; profileTipCnt+=2)
+//	{
+//		tempFlash = *(__IO uint16_t*)((void*)PROFILE_TIP_SETTINGS+profileTipCnt);
+//		if(tempFlash==0xffff) break;
+//		profileTipRam.profileTip=tempFlash;
+//	}
+//	if(profileTipRam.bootProfile>=NUM_PROFILES || profileTipRam.bootTip>=NUM_TIPS) profileTipRam.profileTip=0;
+//}
 
