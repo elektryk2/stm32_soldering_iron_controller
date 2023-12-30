@@ -323,6 +323,16 @@ __attribute__((aligned(4))) typedef struct{
   uint8_t         currentTip;
 }systemSettings_t;
 
+
+typedef union{
+  uint16_t profileTip;
+  struct{
+    uint8_t bootProfile;
+    uint8_t bootTip;
+  };
+}profileTipSettings_t;
+
+
 extern systemSettings_t systemSettings;
 extern const settings_t defaultSettings;
 
