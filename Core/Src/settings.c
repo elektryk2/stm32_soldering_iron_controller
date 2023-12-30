@@ -217,12 +217,7 @@ void checkSettings(void){
                        scr_index == screen_reset_confirmation);
 
 #ifndef HAS_BATTERY
-  if(systemSettings.settings.saveTemp)
-  {
-	 // profileTipRam.bootProfile=systemSettings.currentProfile;
-	 // profileTipRam.bootTip=systemSettings.currentTip;
-  }
-  else
+  if(!systemSettings.settings.saveTemp)
   {
 	  if(systemSettings.settings.rememberLastProfile)
 	  {
