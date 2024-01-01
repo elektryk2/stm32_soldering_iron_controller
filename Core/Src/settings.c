@@ -24,6 +24,8 @@
 //                    0x801e800
 #define PROFILE_TIP_SETTINGS (TEMP_SETTINGS-FLASH_PAGE_SIZE)
 //#define TEMP_SETTINGS (0x801F000+3840+128)
+const uint32_t increments[]={1, 2, 4, 8}; //values at [0] won't be used but added it for better clearance
+const uint64_t mask[]={0xff, 0xffff, 0xffffffff, 0xffffffffffffffff}; //the same here
 
 static uint32_t tempCnt=0;
 static uint16_t tempRam=0;
@@ -140,8 +142,8 @@ static uint32_t ChecksumProfile(profile_t* profile);
 static void resetSystemSettings(void);
 static void resetCurrentProfile(void);
 
-static void readTempInit(uint16_t * valRam, uint32_t addr, uint32_t * cnt);
-static void writeTemp(uint16_t tempArg, uint32_t addr, uint32_t * cnt);
+static uint64_t readTempInit(uint32_t addr, uint32_t * cnt, uint32_t size); //call it only once during init
+static void writeTemp(uint64_t tempArg, uint32_t addr, uint32_t * cnt, uint32_t size);
 
 
 
@@ -286,14 +288,14 @@ void checkSettings(void){
 			if(tempChangeTrigger==true)
 			{
 				if(tempRam != newTemperature) //make sure not to write the same value twice
-					writeTemp(newTemperature,TEMP_SETTINGS,&tempCnt);
+					writeTemp(newTemperature,TEMP_SETTINGS,&tempCnt, FLASH_TYPEPROGRAM_HALFWORD);
 				tempChangeTrigger=false;
 			}
 		}
 
 
 		newProfileTip.bootProfile=systemSettings.currentProfile;
-		newProfileTip.bootTip=systemSettings.currentTip;
+		newProfileTip.bootTip[systemSettings.currentProfile]=systemSettings.currentTip;
 		if(newProfileTip.profileTip!=prevProfileTip.profileTip) //poll for temprature change
 		{
 			prevProfileTip.profileTip=newProfileTip.profileTip;
@@ -308,7 +310,7 @@ void checkSettings(void){
 			if(profileTipChangeTrigger==true)
 			{
 				if(profileTipRam.profileTip != newProfileTip.profileTip) //make sure not to write the same value twice
-					writeTemp(newProfileTip.profileTip,PROFILE_TIP_SETTINGS,&profileTipCnt);
+					writeTemp(newProfileTip.profileTip,PROFILE_TIP_SETTINGS,&profileTipCnt, FLASH_TYPEPROGRAM_WORD);
 				profileTipChangeTrigger=false;
 			}
 		}
@@ -572,19 +574,19 @@ void restoreSettings() {
     checksumError(reset_All);
   }
 
-  readTempInit(&profileTipRam.profileTip, PROFILE_TIP_SETTINGS, &profileTipCnt); //read tip and profile from flash
+  profileTipRam.profileTip=readTempInit(PROFILE_TIP_SETTINGS, &profileTipCnt, FLASH_TYPEPROGRAM_WORD); //read tip and profile from flash
   if(profileTipRam.bootProfile>=NUM_PROFILES) profileTipRam.profileTip=0;
 
   if(systemSettings.settings.saveTemp) // assume the boot profile
   {
 	  loadProfile(profileTipRam.bootProfile);  //new behaviour
-	  setCurrentTip(profileTipRam.bootTip);
+	  setCurrentTip(profileTipRam.bootTip[systemSettings.currentProfile]);
   }
   else
 	  loadProfile(systemSettings.settings.bootProfile); //default behaviour
 
 
-  readTempInit(&tempRam, TEMP_SETTINGS, &tempCnt); //read temp from flash
+  tempRam=readTempInit(TEMP_SETTINGS, &tempCnt, FLASH_TYPEPROGRAM_HALFWORD); //read temp from flash
 	if((tempRam > systemSettings.Profile.MaxSetTemperature) || (tempRam < systemSettings.Profile.MinSetTemperature))
 		tempRam=systemSettings.Profile.defaultTemperature;
    if(systemSettings.settings.saveTemp) setUserTemperature(tempRam);
@@ -998,22 +1000,33 @@ static void ErrCountDown(uint8_t Start,uint8_t  xpos, uint8_t ypos){
 
 
 
-static void readTempInit(uint16_t * valRam, uint32_t addr, uint32_t * cnt) //call it only once during init
+static uint64_t readTempInit(uint32_t addr, uint32_t * cnt, uint32_t size) //call it only once during init
 {
-	uint16_t valFlash=0;
-	for(*cnt=0; *cnt<FLASH_PAGE_SIZE; *cnt+=2)
+	if(size>3 || size<1) return 0;
+	uint64_t valFlash=0, valRam=0;
+
+	for(*cnt=0; *cnt<FLASH_PAGE_SIZE; *cnt+=increments[size])
 	{
-		valFlash = *(__IO uint16_t*)((void*)addr + *cnt);
-		if(valFlash==0xffff) break;
-		*valRam=valFlash;
+		if(size==FLASH_TYPEPROGRAM_HALFWORD) 		valFlash = *(__IO uint16_t*)((void*)addr + *cnt);
+		if(size==FLASH_TYPEPROGRAM_WORD)	 		valFlash = *(__IO uint32_t*)((void*)addr + *cnt);
+		if(size==FLASH_TYPEPROGRAM_DOUBLEWORD) 		valFlash = *(__IO uint64_t*)((void*)addr + *cnt);
+		if(valFlash==mask[size]) break;
+		valRam=valFlash;
 	}
+	return valRam;
 }
 
 
-static void writeTemp(uint16_t tempArg, uint32_t addr, uint32_t * cnt)
+static void writeTemp(uint64_t tempArg, uint32_t addr, uint32_t * cnt, uint32_t size)
 {
+	if(size>3 || size<1) return;
+	uint16_t valFlash = 0;
 
-	if(*cnt>=FLASH_PAGE_SIZE)
+	if(size==FLASH_TYPEPROGRAM_HALFWORD) 		valFlash = *(__IO uint16_t*)((void*)addr + *cnt);
+	if(size==FLASH_TYPEPROGRAM_WORD)	 		valFlash = *(__IO uint32_t*)((void*)addr + *cnt);
+	if(size==FLASH_TYPEPROGRAM_DOUBLEWORD) 		valFlash = *(__IO uint64_t*)((void*)addr + *cnt);
+
+	if(*cnt>=FLASH_PAGE_SIZE || valFlash!=mask[size])
 	{
 		eraseFlashPages(addr, 1);
 		*cnt=0;
@@ -1021,28 +1034,14 @@ static void writeTemp(uint16_t tempArg, uint32_t addr, uint32_t * cnt)
 
 	__disable_irq();
 	HAL_FLASH_Unlock();
-	if(HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, addr + *cnt, tempArg ) != HAL_OK)
+	if(HAL_FLASH_Program(size, addr + *cnt, tempArg ) != HAL_OK)
 	{
 	  Flash_error();
 	}
-	*cnt+=2;
+	*cnt+=increments[size];
+
 	HAL_FLASH_Lock();
 	__enable_irq();
 
 }
-
-
-
-
-//void readProfileTipInit() //call it only once during init
-//{
-//	uint16_t tempFlash=0;
-//	for(profileTipCnt=0; tempCnt<FLASH_PAGE_SIZE; profileTipCnt+=2)
-//	{
-//		tempFlash = *(__IO uint16_t*)((void*)PROFILE_TIP_SETTINGS+profileTipCnt);
-//		if(tempFlash==0xffff) break;
-//		profileTipRam.profileTip=tempFlash;
-//	}
-//	if(profileTipRam.bootProfile>=NUM_PROFILES || profileTipRam.bootTip>=NUM_TIPS) profileTipRam.profileTip=0;
-//}
 
