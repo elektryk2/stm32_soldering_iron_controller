@@ -323,12 +323,14 @@ __attribute__((aligned(4))) typedef struct{
   uint8_t         currentTip;
 }systemSettings_t;
 
-
+#if NUM_PROFILES!=3
+#pragma message("actually only 3 profiles are supported!!!")
+#endif
 typedef union{
-  uint16_t profileTip;
+  uint32_t profileTip;
   struct{
     uint8_t bootProfile;
-    uint8_t bootTip;
+    uint8_t bootTip[NUM_PROFILES]; //3*8=24
   };
 }profileTipSettings_t;
 
