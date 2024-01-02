@@ -38,8 +38,8 @@ static uint32_t prevTemperature    = 0u;
 static uint32_t newTemperature = 0u;
 static uint32_t lastCheckTimeOfTemperature=0;
 static uint32_t lastCheckTimeOfProfileTip=0;
-static profileTipSettings_t prevProfileTip={.profileTip=0};
-static profileTipSettings_t newProfileTip={.profileTip=0};
+static profileTipSettings_t profileTipPrev={.profileTip=0};
+//static profileTipSettings_t newProfileTip={.profileTip=0};
 
 ///temperature saving variables end
 
@@ -219,17 +219,17 @@ void checkSettings(void){
                        scr_index == screen_reset_confirmation);
 
 #ifndef HAS_BATTERY
-  if(!systemSettings.settings.saveTemp)
-  {
-	  if(systemSettings.settings.rememberLastProfile)
-	  {
-		systemSettings.settings.bootProfile = systemSettings.currentProfile;
-	  }
-	  if(systemSettings.settings.rememberLastTip)
-	  {
-		systemSettings.Profile.defaultTip = systemSettings.currentTip;
-	  }
-  }
+//  if(!systemSettings.settings.saveTemp)
+//  {
+//	  if(systemSettings.settings.rememberLastProfile)
+//	  {
+//		systemSettings.settings.bootProfile = systemSettings.currentProfile;
+//	  }
+//	  if(systemSettings.settings.rememberLastTip)
+//	  {
+//		systemSettings.Profile.defaultTip = systemSettings.currentTip;
+//	  }
+//  }
 #endif
 
   // Save from menu
@@ -294,14 +294,13 @@ void checkSettings(void){
 		}
 
 
-		newProfileTip.bootProfile=systemSettings.currentProfile;
-		newProfileTip.bootTip[systemSettings.currentProfile]=systemSettings.currentTip;
-		if(newProfileTip.profileTip!=prevProfileTip.profileTip) //poll for temprature change
+		profileTipRam.bootProfile=systemSettings.currentProfile;
+		profileTipRam.bootTip[systemSettings.currentProfile]=systemSettings.currentTip;
+		if(profileTipRam.profileTip!=profileTipPrev.profileTip) //poll for temprature change
 		{
-			prevProfileTip.profileTip=newProfileTip.profileTip;
+			profileTipPrev.profileTip=profileTipRam.profileTip;
 			lastCheckTimeOfProfileTip = CurrentTime; //start time counting from now
 			profileTipChangeTrigger=true;
-
 		}
 
 		if((CurrentTime-lastCheckTimeOfProfileTip)>999)
@@ -309,8 +308,7 @@ void checkSettings(void){
 			lastCheckTimeOfProfileTip = CurrentTime; //reset time counting
 			if(profileTipChangeTrigger==true)
 			{
-				if(profileTipRam.profileTip != newProfileTip.profileTip) //make sure not to write the same value twice
-					writeTemp(newProfileTip.profileTip,PROFILE_TIP_SETTINGS,&profileTipCnt, FLASH_TYPEPROGRAM_WORD);
+				writeTemp(profileTipRam.profileTip,PROFILE_TIP_SETTINGS,&profileTipCnt, FLASH_TYPEPROGRAM_WORD);
 				profileTipChangeTrigger=false;
 			}
 		}
@@ -576,14 +574,14 @@ void restoreSettings() {
 
   profileTipRam.profileTip=readTempInit(PROFILE_TIP_SETTINGS, &profileTipCnt, FLASH_TYPEPROGRAM_WORD); //read tip and profile from flash
   if(profileTipRam.bootProfile>=NUM_PROFILES) profileTipRam.profileTip=0;
-
-  if(systemSettings.settings.saveTemp) // assume the boot profile
-  {
+  profileTipPrev.profileTip=profileTipRam.profileTip;
+//  if(systemSettings.settings.saveTemp) // assume the boot profile
+//  {
 	  loadProfile(profileTipRam.bootProfile);  //new behaviour
-	  setCurrentTip(profileTipRam.bootTip[systemSettings.currentProfile]);
-  }
-  else
-	  loadProfile(systemSettings.settings.bootProfile); //default behaviour
+	  //setCurrentTip(profileTipRam.bootTip[systemSettings.currentProfile]);
+//  }
+//  else
+//	  loadProfile(systemSettings.settings.bootProfile); //default behaviour
 
 
   tempRam=readTempInit(TEMP_SETTINGS, &tempCnt, FLASH_TYPEPROGRAM_HALFWORD); //read temp from flash
@@ -883,7 +881,7 @@ void loadProfile(uint8_t profile){
   }
   setSystemTempUnit(getSystemTempUnit());                        // Ensure the profile uses the same temperature unit as the system
   setUserTemperature(systemSettings.Profile.defaultTemperature);
-  setCurrentTip(systemSettings.Profile.defaultTip);
+  setCurrentTip(profileTipRam.bootTip[systemSettings.currentProfile]);
   TIP.filter=systemSettings.Profile.tipFilter;
   ironSchedulePwmUpdate();
   __enable_irq();
@@ -1020,7 +1018,7 @@ static uint64_t readTempInit(uint32_t addr, uint32_t * cnt, uint32_t size) //cal
 static void writeTemp(uint64_t tempArg, uint32_t addr, uint32_t * cnt, uint32_t size)
 {
 	if(size>3 || size<1) return;
-	uint16_t valFlash = 0;
+	uint64_t valFlash = 0;
 
 	if(size==FLASH_TYPEPROGRAM_HALFWORD) 		valFlash = *(__IO uint16_t*)((void*)addr + *cnt);
 	if(size==FLASH_TYPEPROGRAM_WORD)	 		valFlash = *(__IO uint32_t*)((void*)addr + *cnt);
