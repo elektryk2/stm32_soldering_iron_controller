@@ -205,7 +205,7 @@ static widget_t *Widget_Voltage;
 #endif
 
 static widget_t *Widget_IronTemp;
-static widget_t *Widget_SetPoint;
+widget_t *Widget_SetPoint;
 
 static struct{
   uint8_t lastPwr;                        // Last stored power for widget

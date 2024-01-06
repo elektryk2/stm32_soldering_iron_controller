@@ -234,12 +234,12 @@ static void setScreenSaver(uint32_t *val) {
 }
 //=========================================================
 //=========================================================
-static void * getSaveTemp() {
-  temp = systemSettings.settings.saveTemp;
+static void * getLoadDefTemp() {
+  temp = systemSettings.settings.loadDefTemp;
   return &temp;
 }
-static void setSaveTemp(uint32_t *val) {
-	systemSettings.settings.saveTemp = *val;
+static void setLoadDefTemp(uint32_t *val) {
+	systemSettings.settings.loadDefTemp = *val;
 }
 //=========================================================
 //=========================================================
@@ -525,13 +525,13 @@ static void system_create(screen_t *scr){
   edit->options = strings[lang].OffOn;
   edit->numberOfOptions = 2;
 
-  //  [ Save temp widget ]
+  //  [ Load default temp widget ]
   //
-  newComboMultiOption(w, "Save temp", &edit, NULL);
-  edit->inputData.getData = &getSaveTemp;
+  newComboMultiOption(w, "Load def.t.", &edit, NULL);
+  edit->inputData.getData = &getLoadDefTemp;
   edit->big_step = 1;
   edit->step = 1;
-  edit->setData = (setterFn)&setSaveTemp;
+  edit->setData = (setterFn)&setLoadDefTemp;
   edit->options = strings[lang].OffOn;
   edit->numberOfOptions = 2;
 
