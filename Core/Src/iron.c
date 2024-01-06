@@ -252,7 +252,7 @@ void handleIron(void) {
   }
   if(Iron.calibrating)
   {///in calibration mode didn't touch this procedure
-	  if( !Iron.temperatureReached && (abs(setTemp-last_TIP_C)<5 /*|| (last_TIP_C>=setTemp && !Iron.calibrating)*/)) //allow to higher temp reached if not calibrating
+	  if( !Iron.temperatureReached && (abs(setTemp-last_TIP_C)<5 )) //allow to higher temp reached if not calibrating
 	  {                                 // Allow +-5° margin for noisier stations
 		if(reachedTime==0)
 		{
@@ -274,85 +274,13 @@ void handleIron(void) {
   }
   else
 	  if( !Iron.temperatureReached && (abs(setTemp-last_TIP_C)<5) && !Widget_SetPoint->enabled) //allow to higher temp reached if not calibrating
-	  	  {                                 // Allow +-5° margin for noisier stations
-//	  		if(reachedTime==0)
-//	  		{
-//	  		  reachedTime=CurrentTime;
-//	  		}
-//	  		else if(CurrentTime-reachedTime>5)
-//	  		{                                                    // Wait 1s for stable readings
+	  	  {                                 // Allow +-5° margin for noisier stations                                                 // Wait 1s for stable readings
 	  		  Iron.temperatureReached = 1;
 	  		  if(Iron.CurrentMode > mode_standby)
 	  		  {                                                    // Beep when reaching target temperature, but only in run & boost modes
 	  			temperatureReached( Iron.TargetTemperature);
 	  		  }
-//	  		}
 	  	  }
-//	  	  else
-//	  	  {
-//	  		reachedTime = 0;
-//	  	  }
-
-
-//if(!Iron.temperatureReached)
-//  {///if not in calibration then beep without any delay
-//	  static int16_t prevTemp = 0;
-//	  static int16_t diff = 0;
-//
-////	  if(Iron.Error.Flags)
-////	  {
-////		  prevTemp=0;
-////		  reachedTime=0;
-////		  return;
-////	  }
-////	  if(prevTemp!=setTemp)
-////	  {
-////		  diff = setTemp-prevTemp;
-////		  prevTemp=setTemp;
-////		  reachedTime=CurrentTime;
-////
-////	  }
-//
-//	  if(last_TIP_C!=setTemp)
-//	  {
-//		  diff = setTemp-last_TIP_C;
-//		  if(diff>0 && last_TIP_C>=setTemp)
-//			  Iron.temperatureReached = 1;
-//		  if(diff<0 && last_TIP_C<=setTemp)
-//			  Iron.temperatureReached = 1;
-//		  if(Iron.temperatureReached)
-//		  {
-//			  if(Iron.CurrentMode > mode_standby)
-//			  {                                                    // Beep when reaching target temperature, but only in run & boost modes
-//				  temperatureReached( Iron.TargetTemperature);
-//			  }
-//		  }
-//
-//	  }
-//
-////	  if(reachedTime==0)
-////	  {
-////	    reachedTime=CurrentTime;
-////	  }
-////	  else if(CurrentTime-reachedTime>1000)
-////	  {         // Wait 1s for stable readings
-////		  if(diff>0 && last_TIP_C>=setTemp) Iron.temperatureReached = 1;
-////		  if(diff<0 && last_TIP_C<=setTemp) Iron.temperatureReached = 1;
-////		  if(Iron.temperatureReached)
-////		  {
-////			  reachedTime=CurrentTime;
-////			  diff=0;
-////			  if(Iron.CurrentMode > mode_standby)
-////			  {                                                    // Beep when reaching target temperature, but only in run & boost modes
-////				  temperatureReached( Iron.TargetTemperature);
-////			  }
-////		  }
-////	  }
-//  }
-//  else
-//  {
-//	reachedTime = 0;
-//  }
 }
 
 // Round to closest 10
