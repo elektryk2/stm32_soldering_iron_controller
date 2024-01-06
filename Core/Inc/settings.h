@@ -265,7 +265,7 @@ __attribute__((aligned(4))) typedef struct{
   uint8_t       : 8;
   uint8_t       : 8;
 #endif
-  uint8_t saveTemp		: 1;
+  uint8_t loadDefTemp		: 1;
   uint8_t screenSaver	: 1;
   uint8_t intTempFix	: 1;
   uint8_t       : 5;
